@@ -1,6 +1,9 @@
+from cgitb import lookup
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Iterable, List, Tuple
 
+from pandas.core.indexing import is_label_like
 from typing_extensions import Protocol
 
 # ## Task 1.1
@@ -22,9 +25,10 @@ def central_difference(f: Any, *vals: Any, arg: int = 0, epsilon: float = 1e-6) 
     Returns:
         An approximation of $f'_i(x_0, \ldots, x_{n-1})$
     """
-    # TODO: Implement for Task 1.1.
-    raise NotImplementedError("Need to implement for Task 1.1")
+    vals_lower = [x if i != arg else x - epsilon / 2. for i, x in enumerate[Any](vals)]
+    vals_upper = [x if i != arg else x + epsilon / 2. for i, x in enumerate[Any](vals)]
 
+    return (f(*vals_upper) - f(*vals_lower)) / float(epsilon)
 
 variable_count = 1
 
@@ -61,9 +65,46 @@ def topological_sort(variable: Variable) -> Iterable[Variable]:
     Returns:
         Non-constant Variables in topological order starting from the right.
     """
-    # TODO: Implement for Task 1.4.
-    raise NotImplementedError("Need to implement for Task 1.4")
+    # Kahn's
+    indegrees = defaultdict[int, int](int)
+    var_lookup: dict[int, Variable] = {}
 
+    print("rightmost id:", variable.unique_id)
+    stack = [variable]
+
+    seen = set[int]()
+    while len(stack) > 0:
+        top = stack.pop()
+        var_lookup[top.unique_id] = top
+
+        if top.unique_id in seen:
+            continue
+
+        seen.add(top.unique_id)
+
+        if top.unique_id not in indegrees:
+            indegrees[top.unique_id] = 0
+
+        if top.is_constant():
+            continue
+
+        for parent in top.parents:
+            stack.append(parent)
+            indegrees[parent.unique_id] += 1
+
+    working_set = [var_lookup[variable] for variable, deg in indegrees.items() if deg == 0]
+    while len(working_set) > 0:
+        top = working_set.pop()
+
+        if top.is_constant():
+            continue
+
+        yield top
+
+        for parent in top.parents:
+            indegrees[parent.unique_id] -= 1
+            if indegrees[parent.unique_id] == 0:
+                working_set.append(parent)
 
 def backpropagate(variable: Variable, deriv: Any) -> None:
     """
@@ -76,9 +117,22 @@ def backpropagate(variable: Variable, deriv: Any) -> None:
 
     No return. Should write to its results to the derivative values of each leaf through `accumulate_derivative`.
     """
-    # TODO: Implement for Task 1.4.
-    raise NotImplementedError("Need to implement for Task 1.4")
+    deriv_vals = defaultdict[int, float](float)
 
+    deriv_vals[variable.unique_id] = deriv
+
+    for var in topological_sort(variable):    
+        print(var, var.history, var.is_constant(), var.is_leaf(), deriv_vals)
+        if var.is_leaf():
+            continue
+
+        derivatives = var.chain_rule(deriv_vals[var.unique_id])
+
+        for par_variable, d_val in derivatives:
+            if par_variable.is_leaf():
+                par_variable.accumulate_derivative(d_val)
+            else:
+                deriv_vals[par_variable.unique_id] += d_val
 
 @dataclass
 class Context:

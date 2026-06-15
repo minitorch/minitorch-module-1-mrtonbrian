@@ -96,6 +96,70 @@ def test_chain_rule4() -> None:
     assert deriv == 5 * 5
 
 
+def _topological_ids(variable: minitorch.Scalar) -> Tuple[int, ...]:
+    return tuple(v.unique_id for v in minitorch.topological_sort(variable))
+
+
+def _assert_before(
+    order: Tuple[int, ...], first: minitorch.Scalar, second: minitorch.Scalar
+) -> None:
+    positions = {unique_id: index for index, unique_id in enumerate(order)}
+    assert positions[first.unique_id] < positions[second.unique_id]
+
+
+@pytest.mark.task1_4
+def test_topological_sort_simple() -> None:
+    var1 = minitorch.Scalar(1)
+    var2 = minitorch.Scalar(2)
+    out = Function1.apply(var1, var2)
+
+    order = _topological_ids(out)
+
+    assert order[0] == out.unique_id
+    assert set(order) == {out.unique_id, var1.unique_id, var2.unique_id}
+    _assert_before(order, out, var1)
+    _assert_before(order, out, var2)
+
+
+@pytest.mark.task1_4
+def test_topological_sort_diamond() -> None:
+    var1 = minitorch.Scalar(1)
+    var2 = minitorch.Scalar(2)
+    left = Function2.apply(var1, var2)
+    right = Function1.apply(left, var2)
+    out = Function1.apply(left, right)
+
+    order = _topological_ids(out)
+
+    assert len(order) == len(set(order))
+    assert set(order) == {
+        out.unique_id,
+        right.unique_id,
+        left.unique_id,
+        var1.unique_id,
+        var2.unique_id,
+    }
+    _assert_before(order, out, left)
+    _assert_before(order, out, right)
+    _assert_before(order, right, left)
+    _assert_before(order, right, var2)
+    _assert_before(order, left, var1)
+    _assert_before(order, left, var2)
+
+
+@pytest.mark.task1_4
+def test_topological_sort_ignores_constants() -> None:
+    constant = minitorch.Scalar(10, None)
+    var = minitorch.Scalar(5)
+    out = minitorch.Scalar(
+        15, ScalarHistory(Function1, ctx=Context(), inputs=[constant, var])
+    )
+
+    order = _topological_ids(out)
+
+    assert order == (out.unique_id, var.unique_id)
+
+
 # ## Task 1.4 - Run some simple backprop tests
 
 # Main tests are in test_scalar.py
